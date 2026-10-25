@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import Svg, { Path } from 'react-native-svg';
 
 // Optional packages: if one isn't installed in Snack yet, the app still opens and that feature tells you what to add.
 let SecureStore = null;
@@ -39,10 +40,6 @@ let DocPicker = null;
 try { DocPicker = require('expo-document-picker'); } catch (e) {}
 let XLSX = null;
 try { XLSX = require('xlsx'); } catch (e) {}
-let Ionicons = null;
-try { Ionicons = require('@expo/vector-icons').Ionicons; } catch (e) {}
-
-
 const keyStore = {
   get: () =>
     SecureStore
@@ -101,9 +98,36 @@ function charges(e, from, to) {
 }
 // ---- Look and feel helpers ----
 let P = null; // the active colour palette, set on every render
-const ICON_FALLBACK = { add: '+', 'settings-outline': '⚙︎', 'swap-vertical': '⇅', search: '⌕' };
-const Icon = ({ name, size = 22, color }) =>
-  Ionicons ? <Ionicons name={name} size={size} color={color} /> : <Text style={{ fontSize: size * 0.8, color }}>{ICON_FALLBACK[name] || '•'}</Text>;
+const ICON_PATHS = {
+  add: 'M24 8v32M8 24h32',
+  'settings-outline': 'M24 15a9 9 0 1 0 0 18 9 9 0 0 0 0-18M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M38.1 9.9l-4.2 4.2M14.1 33.9l-4.2 4.2',
+  search: 'M21 11a10 10 0 1 0 0 20 10 10 0 0 0 0-20M29 29l11 11',
+  'swap-vertical': 'M18 8v32M18 8l-7 7M18 8l7 7M30 40V8M30 40l-7-7M30 40l7-7',
+  'file-tray-outline': 'M8 17h32v21H8zM8 17l7-8h18l7 8M17 26h14',
+  home: 'M6 23 24 8l18 15M10 22v18h28V22M18 40V29h12v11',
+  'home-outline': 'M6 23 24 8l18 15M10 22v18h28V22M18 40V29h12v11',
+  desktop: 'M6 10h36v24H6zM17 40h14M24 34v6',
+  'desktop-outline': 'M6 10h36v24H6zM17 40h14M24 34v6',
+  cube: 'M24 6 41 15 24 24 7 15 24 6M7 15v19l17 9 17-9V15M24 24v19',
+  'cube-outline': 'M24 6 41 15 24 24 7 15 24 6M7 15v19l17 9 17-9V15M24 24v19',
+  'stats-chart': 'M8 40V29h6v11M21 40V20h6v20M34 40V10h6v30',
+  'stats-chart-outline': 'M8 40V29h6v11M21 40V20h6v20M34 40V10h6v30',
+  'hammer-outline': 'M12 42l16-19M20 8h18v8H20zM20 12l-8 8',
+  'receipt-outline': 'M12 7h24v33l-5-3-5 3-5-3-5 3-4-3zM18 16h12M18 23h12M18 30h8',
+  'calculator-outline': 'M10 6h28v36H10zM16 12h16v7H16zM16 25h5v5h-5zM27 25h5v5h-5zM16 34h5v5h-5zM27 34h5v5h-5z',
+};
+const Icon = React.memo(({ name, size = 22, color, style }) => (
+  <Svg width={size} height={size} viewBox="0 0 48 48" style={style}>
+    <Path
+      d={ICON_PATHS[name] || ICON_PATHS['file-tray-outline']}
+      fill="none"
+      stroke={color}
+      strokeWidth="4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+));
 const STATUS_COLORS = { Planned: '#8E8E93', 'In progress': '#F59E0B', Listed: '#3B82F6', Sold: '#22A06B', 'In Stock': '#64748B', 'In Build': '#F59E0B' };
 const Pill = ({ status, styles: s }) => {
   const c = STATUS_COLORS[status] || '#8E8E93';
@@ -512,7 +536,10 @@ export default function App() {
           const on = tab === k;
           return (
             <TouchableOpacity key={k} style={s.tab} onPress={() => { tick(); setTab(k); }}>
-              <Icon name={on ? ic : ic + '-outline'} size={24} color={on ? P.link : P.sub} />
+              <View style={s.tabIcon}>
+                <Icon name={ic} size={24} color={P.link} style={{ opacity: on ? 1 : 0 }} />
+                <Icon name={ic + '-outline'} size={24} color={P.sub} style={[s.tabIconInactive, { opacity: on ? 0 : 1 }]} />
+              </View>
               <Text style={[s.tabT, on && s.tabOn]}>{l}</Text>
             </TouchableOpacity>
           );
@@ -2462,8 +2489,10 @@ const makeStyles = (c) => {
     chipOn: { backgroundColor: c.btn },
     chipT: { color: c.text },
 
-    tabs: { flexDirection: 'row', backgroundColor: c.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: c.line, paddingTop: 6 },
+    tabs: { flexDirection: 'row', backgroundColor: c.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: c.line, paddingTop: 6, paddingBottom: 20, marginBottom: -20 },
     tab: { flex: 1, alignItems: 'center', paddingVertical: 4, gap: 2 },
+    tabIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+    tabIconInactive: { position: 'absolute' },
     tabT: { fontSize: 11, fontWeight: '600', color: c.sub },
     tabOn: { color: c.link },
     fab: { position: 'absolute', right: 20, bottom: 92, width: 58, height: 58, borderRadius: 29, backgroundColor: c.btn, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
