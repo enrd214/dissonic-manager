@@ -80,6 +80,7 @@ const STEP = { monthly: 1, quarterly: 3, yearly: 12 };
 const PER_MONTH = { none: 0, weekly: 52 / 12, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12 };
 const noon = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).getTime();
 const fmtDate = (t) => new Date(t).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
+const dateInput = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // every date (ms) an expense is charged between from and to
 function charges(e, from, to) {
@@ -116,6 +117,8 @@ const Pill = ({ status, styles: s }) => {
 const BUILD_SORTS = [
   { key: 'newest', label: 'Newest first' },
   { key: 'oldest', label: 'Oldest first' },
+  { key: 'soldNewest', label: 'Sold date newest' },
+  { key: 'soldOldest', label: 'Sold date oldest' },
   { key: 'costHigh', label: 'Highest cost' },
   { key: 'costLow', label: 'Lowest cost' },
   { key: 'profitHigh', label: 'Biggest profit' },
@@ -139,6 +142,13 @@ function sortBuilds(rows, key) {
   const by = {
     newest: (a, b) => b.id - a.id,
     oldest: (a, b) => a.id - b.id,
+    soldNewest: (a, b) => (b.soldAt || 0) - (a.soldAt || 0) || b.id - a.id,
+    soldOldest: (a, b) => {
+      if (!a.soldAt && !b.soldAt) return b.id - a.id;
+      if (!a.soldAt) return 1;
+      if (!b.soldAt) return -1;
+      return a.soldAt - b.soldAt || b.id - a.id;
+    },
     costHigh: (a, b) => cost(b) - cost(a),
     costLow: (a, b) => cost(a) - cost(b),
     name: (a, b) => (a.name || '').localeCompare(b.name || ''),
@@ -453,7 +463,7 @@ export default function App() {
           sortKey={prefs.buildSort || 'newest'}
           onSort={(k) => setPrefs({ buildSort: k })}
           styles={s}
-          sub={(r) => `${r.sku || 'No SKU'} · ${CATS.filter((c) => r.parts?.[c]?.name).length}/${CATS.length} parts · ${money(buildTotal(r))} cost` + ageText(buildAge(r), staleLimit)}
+          sub={(r) => `${r.sku || 'No SKU'} · ${CATS.filter((c) => r.parts?.[c]?.name).length}/${CATS.length} parts · ${money(buildTotal(r))} cost` + (statusOf(r) === 'Sold' && r.soldAt ? ` · sold ${fmtDate(r.soldAt)}` : '') + ageText(buildAge(r), staleLimit)}
           right={(r) => {
             if (!(n(r.sell?.price) > 0)) return null;
             const p = buildProfit(r).profit;
@@ -1169,6 +1179,7 @@ function BuildEditor({
 }) {
   const [b, setB] = useState(rec);
   const [sub, setSub] = useState('parts');
+  const [soldText, setSoldText] = useState(rec.soldAt ? dateInput(new Date(rec.soldAt)) : '');
   const setSell = (field, v) => setB({ ...b, sell: { ...b.sell, [field]: v } });
   const r = buildProfit(b);
   const feeType = b.sell?.feeType || '$';
@@ -1311,6 +1322,36 @@ function BuildEditor({
               value={b.sell?.loss == null ? '' : String(b.sell.loss)}
               onChangeText={(t) => setSell('loss', t)}
             />
+
+            <Text style={s.sub}>Date sold</Text>
+            {DateTimePicker ? (
+              <DateTimePicker
+                value={new Date(b.soldAt || Date.now())}
+                mode="date"
+                display="compact"
+                themeVariant={P === DARK ? 'dark' : 'light'}
+                style={{ alignSelf: 'flex-start', marginBottom: 12 }}
+                onChange={(_, d) => {
+                  if (!d) return;
+                  setSoldText(dateInput(d));
+                  setB({ ...b, soldAt: noon(d) });
+                }}
+              />
+            ) : (
+              <TextInput
+                style={s.input}
+                placeholder="YYYY-MM-DD"
+                value={soldText}
+                onChangeText={(t) => {
+                  setSoldText(t);
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+                    const d = new Date(t + 'T12:00:00');
+                    if (!Number.isNaN(d.getTime()) && dateInput(d) === t) setB({ ...b, soldAt: noon(d) });
+                  } else if (!t) setB({ ...b, soldAt: null });
+                }}
+              />
+            )}
+            {!b.soldAt && <Text style={[s.sub, { marginBottom: 10 }]}>Choose the actual sale date to place this build in the correct financial period.</Text>}
 
             <View style={s.card}>
               <Line l="Sell price" v={money(r.sp)} styles={s} />
@@ -2137,7 +2178,7 @@ function Financials({ builds, expenses = [], onProfit, onExpense, styles: s }) {
       {t.sold.length > 0 && (
         <Text style={[s.sub, { marginBottom: 6, marginTop: 12 }]}>SOLD BUILDS</Text>
       )}
-      {t.sold.map(({ b, r }) => (
+      {[...t.sold].sort((a, b) => (b.b.soldAt || b.b.id) - (a.b.soldAt || a.b.id)).map(({ b, r }) => (
         <View key={b.id} style={s.row}>
           <Line
             l={b.name || '(unnamed)'}
@@ -2146,6 +2187,7 @@ function Financials({ builds, expenses = [], onProfit, onExpense, styles: s }) {
             styles={s}
             color={r.profit < 0 ? '#c0392b' : '#1e8e3e'}
           />
+          <Text style={s.sub}>{b.soldAt ? `Sold ${fmtDate(b.soldAt)}` : 'Sale date not set'}</Text>
         </View>
       ))}
     </ScrollView>
