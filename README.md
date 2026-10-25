@@ -51,3 +51,6 @@ The `ios-unsigned` workflow creates an unsigned IPA-shaped package without
 Apple signing credentials. It builds the `.app` directly with signing disabled,
 then packages it for inspection or extraction. iOS will not install or launch
 it on a device until it is properly signed and provisioned.
+
+The Codemagic workflows use Xcode 26.1 because Expo SDK 57's
+`ExpoModulesJSI` dependency requires Swift 6.2.
