@@ -20,6 +20,11 @@ The iOS/Android development build also includes native context menus for build
 quick actions and the Builds/Inventory sorting menus. Expo Go falls back to the
 in-app menu because it cannot load custom native modules.
 
+Build rows use the local `modules/native-context-menu` Expo module, which
+attaches Apple's `UIContextMenuInteraction` directly to each row. The existing
+custom menu remains the fallback for Expo Go and platforms without the native
+module.
+
 To prepare a local native project:
 
 ```bash

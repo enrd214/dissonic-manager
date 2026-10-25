@@ -1,0 +1,5 @@
+{
+  "name": "native-context-menu",
+  "version": "1.0.0",
+  "main": "src/NativeContextMenu.js"
+}

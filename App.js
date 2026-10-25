@@ -20,6 +20,7 @@ import {
   Switch,
   Share,
   Linking,
+  Platform,
   useColorScheme,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -48,6 +49,10 @@ let ContextMenu = null;
 const runningInExpoGo = Constants?.executionEnvironment === 'storeClient' || Constants?.appOwnership === 'expo';
 if (!runningInExpoGo) {
   try { ContextMenu = require('react-native-context-menu-view').default; } catch (e) {}
+}
+let NativeContextMenu = null;
+if (!runningInExpoGo && Platform.OS === 'ios') {
+  try { NativeContextMenu = require('./modules/native-context-menu/src/NativeContextMenu').default; } catch (e) {}
 }
 const keyStore = {
   get: () =>
@@ -763,7 +768,7 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
               style={[s.row, kind === 'builds' && s.buildRow]}
               activeOpacity={0.7}
               onPress={() => onOpen({ kind, rec: item })}
-              onLongPress={ContextMenu ? undefined : (event) => showQuickActions(item, event)}
+              onLongPress={NativeContextMenu ? undefined : (event) => showQuickActions(item, event)}
               delayLongPress={350}>
               <View style={s.rowTop}>
                 {kind === 'builds' && item.photos?.[0] && (
@@ -785,27 +790,26 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
               </View>
             </TouchableOpacity>
           );
-          const nativeActions = [
-            { title: 'Edit build', action: 'edit' },
-            { title: 'Duplicate build', action: 'duplicate' },
-            ...(statusOf(item) !== 'Listed' ? [{ title: 'Mark as listed', action: 'listed' }] : []),
-            ...(statusOf(item) !== 'Sold' ? [{ title: 'Mark as sold', action: 'sold' }] : []),
-          ];
-          return (
-            kind === 'builds' && ContextMenu ? (
-              <ContextMenu
+          if (kind === 'builds' && NativeContextMenu) {
+            const nativeActions = [
+              { title: 'Edit build', action: 'edit' },
+              { title: 'Duplicate build', action: 'duplicate' },
+              ...(statusOf(item) !== 'Listed' ? [{ title: 'Mark as listed', action: 'listed' }] : []),
+              ...(statusOf(item) !== 'Sold' ? [{ title: 'Mark as sold', action: 'sold' }] : []),
+            ];
+            return (
+              <NativeContextMenu
                 key={String(item.id)}
-                title={item.name || 'Build actions'}
-                previewBackgroundColor={P.card}
-                actions={nativeActions.map((o) => ({ title: o.title }))}
-                onPress={(event) => {
+                actions={nativeActions.map((o) => o.title)}
+                onAction={(event) => {
                   const action = nativeActions[event.nativeEvent.index];
                   if (action) applyQuickAction(item, action.action);
                 }}>
                 {row}
-              </ContextMenu>
-            ) : row
-          );
+              </NativeContextMenu>
+            );
+          }
+          return row;
         }}
       />
       {quickMenu && (
