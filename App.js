@@ -1290,7 +1290,7 @@ function BuildEditor({
           </TouchableOpacity>
         </View>
 
-        <View style={s.seg}>
+        <View style={s.editorNav}>
           {[
             ['parts', 'Parts'],
             ['sell', 'Sell & Profit'],
@@ -1298,12 +1298,12 @@ function BuildEditor({
           ].map(([k, l]) => (
             <TouchableOpacity
               key={k}
-              style={[s.segBtn, sub === k && s.segOn]}
+              style={[s.editorNavBtn, sub === k && s.editorNavOn]}
               onPress={() => {
                 tick();
                 setSub(k);
               }}>
-              <Text style={[s.segT, sub === k && { color: '#fff' }]}>{l}</Text>
+              <Text style={[s.editorNavT, sub === k && s.editorNavTOn]}>{l}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -1314,6 +1314,7 @@ function BuildEditor({
           <ScrollView
             contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
             keyboardShouldPersistTaps="handled">
+            <Text style={s.formSection}>SALE DETAILS</Text>
             <Text style={s.sub}>Status</Text>
             <MenuButton
               styles={s}
@@ -1345,7 +1346,7 @@ function BuildEditor({
               onChangeText={(t) => setSell('price', t)}
             />
 
-            <Text style={s.sub}>Fees</Text>
+            <Text style={s.sub}>Jawa fee</Text>
             <View style={[s.bRow, { zIndex: 10 }]}>
               <TextInput
                 style={[s.input, { flex: 1 }]}
@@ -1386,6 +1387,7 @@ function BuildEditor({
               onChangeText={(t) => setSell('loss', t)}
             />
 
+            <Text style={s.formSection}>SALE TIMING</Text>
             <Text style={s.sub}>Date sold</Text>
             {DateTimePicker ? (
               <DateTimePicker
@@ -1416,7 +1418,7 @@ function BuildEditor({
             )}
             {!b.soldAt && <Text style={[s.sub, { marginBottom: 10 }]}>Choose the actual sale date to place this build in the correct financial period.</Text>}
 
-            <View style={s.card}>
+            <View style={[s.card, s.profitCard]}>
               <Line l="Sell price" v={money(r.sp)} styles={s} />
               <Line l="Parts cost" v={'-' + money(r.cost)} styles={s} />
               <Line
@@ -2593,7 +2595,7 @@ const makeStyles = (c) => {
     gear: { fontSize: 22, color: c.text },
     gearBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center', ...lift },
 
-    row: { backgroundColor: c.card, padding: 16, borderRadius: 18, marginBottom: 12, ...lift },
+    row: { backgroundColor: c.card, padding: 14, borderRadius: 16, marginBottom: 10, ...lift },
     rowTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     rowBottom: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 10 },
     rowRight: { color: c.text, fontSize: 15, fontWeight: '700' },
@@ -2606,14 +2608,14 @@ const makeStyles = (c) => {
     sub: { color: c.sub, fontSize: 13, marginTop: 2 },
     empty: { textAlign: 'center', color: c.sub, fontSize: 15 },
     emptyWrap: { alignItems: 'center', marginTop: 60, gap: 10 },
-    card: { backgroundColor: c.card, padding: 18, borderRadius: 18, marginBottom: 12, ...lift },
+    card: { backgroundColor: c.card, padding: 15, borderRadius: 16, marginBottom: 10, ...lift },
     val: { color: c.text, fontSize: 26, fontWeight: '700' },
 
     searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderRadius: 12, paddingHorizontal: 12, gap: 8 },
     searchInput: { flex: 1, color: c.text, fontSize: 16, paddingVertical: 11 },
     sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.card, borderRadius: 12, paddingHorizontal: 14, height: 44 },
     sortT: { color: c.link, fontSize: 15, fontWeight: '600' },
-    input: { color: c.text, backgroundColor: c.card, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, paddingVertical: 13, paddingHorizontal: 14, fontSize: 16, marginBottom: 14, marginTop: 6 },
+    input: { color: c.text, backgroundColor: c.card, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, paddingVertical: 11, paddingHorizontal: 12, fontSize: 16, marginBottom: 10, marginTop: 5 },
     btn: { backgroundColor: c.btn, paddingVertical: 15, borderRadius: 14, marginTop: 12 },
     btnT: { color: '#fff', textAlign: 'center', fontWeight: '600', fontSize: 16 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 8 },
@@ -2635,10 +2637,11 @@ const makeStyles = (c) => {
     tileIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     tileT: { color: c.text, fontSize: 12, fontWeight: '600' },
 
-    bHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: c.card, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.line },
+    bHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 13, backgroundColor: c.card, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.line },
     link: { color: c.link, fontSize: 16 },
     catHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-    sec: { color: c.sub, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, marginTop: 26, marginBottom: 8 },
+    sec: { color: c.sub, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginTop: 18, marginBottom: 6 },
+    formSection: { color: c.sub, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 4, marginBottom: 8 },
     bRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     bCat: { color: c.text, width: 58, fontWeight: '700' },
     bName: { flex: 1, marginBottom: 8 },
@@ -2648,6 +2651,11 @@ const makeStyles = (c) => {
     bTotal: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: c.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: c.line },
 
     seg: { flexDirection: 'row', margin: 16, marginBottom: 0, backgroundColor: c.chip, borderRadius: 12, padding: 3 },
+    editorNav: { flexDirection: 'row', marginHorizontal: 16, marginTop: 10, marginBottom: 2, padding: 3, backgroundColor: c.chip, borderRadius: 10 },
+    editorNavBtn: { flex: 1, minHeight: 34, paddingHorizontal: 6, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    editorNavOn: { backgroundColor: c.card, ...lift },
+    editorNavT: { color: c.sub, fontSize: 13, fontWeight: '600' },
+    editorNavTOn: { color: c.text, fontWeight: '700' },
     segBtn: { flex: 1, paddingVertical: 10, borderRadius: 10 },
     segOn: { backgroundColor: c.btn },
     segT: { textAlign: 'center', fontWeight: '600', color: c.sub },
@@ -2655,6 +2663,7 @@ const makeStyles = (c) => {
     unitT: { color: c.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
     line: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
     lineV: { color: c.text, fontSize: 15, fontWeight: '500' },
+    profitCard: { marginTop: 4, paddingVertical: 13 },
     hr: { height: StyleSheet.hairlineWidth, backgroundColor: c.line, marginVertical: 8 },
 
     popShadow: { position: 'absolute', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 20 },
