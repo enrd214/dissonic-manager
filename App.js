@@ -19,6 +19,7 @@ import {
   Pressable,
   Switch,
   Share,
+  Linking,
   useColorScheme,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -291,8 +292,8 @@ const EMPTY = {
     staleDays: '30',
     reminders: false,
     lastBackupAt: null,
-    fee: '',
-    feeType: '$',
+    fee: '12',
+    feeType: '%',
     shipping: '',
   },
 };
@@ -433,7 +434,9 @@ export default function App() {
     setEdit(null);
   };
 
-  const prefs = data.settings || EMPTY.settings;
+  const prefs = { ...EMPTY.settings, ...(data.settings || {}) };
+  const newBuildFee = prefs.fee === '' ? EMPTY.settings.fee : prefs.fee;
+  const newBuildFeeType = prefs.fee === '' ? EMPTY.settings.feeType : (prefs.feeType || EMPTY.settings.feeType);
   const dark =
     prefs.theme === 'system' ? scheme === 'dark' : prefs.theme === 'dark';
   const s = makeStyles(dark ? DARK : LIGHT);
@@ -478,8 +481,8 @@ export default function App() {
                   ? {
                       parts: {},
                       sell: {
-                        fee: prefs.fee,
-                        feeType: prefs.feeType,
+                        fee: newBuildFee,
+                        feeType: newBuildFeeType,
                         shipping: prefs.shipping,
                       },
                     }
@@ -536,8 +539,8 @@ export default function App() {
                   ? {
                       parts: {},
                       sell: {
-                        fee: prefs.fee,
-                        feeType: prefs.feeType,
+                        fee: newBuildFee,
+                        feeType: newBuildFeeType,
                         shipping: prefs.shipping,
                       },
                     }
@@ -668,9 +671,19 @@ const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, usedInventoryPart
         renderItem={({ item }) => {
           const r = right ? right(item) : null;
           return (
-            <TouchableOpacity style={s.row} activeOpacity={0.7} onPress={() => onOpen({ kind, rec: item })}>
+            <TouchableOpacity style={[s.row, kind === 'builds' && s.buildRow]} activeOpacity={0.7} onPress={() => onOpen({ kind, rec: item })}>
               <View style={s.rowTop}>
-                <Text style={[s.name, { flex: 1 }]} numberOfLines={1}>{item.name || '(unnamed)'}</Text>
+                {kind === 'builds' && item.photos?.[0] && (
+                  <Image source={{ uri: photoUri(item.photos[0]) }} style={s.buildThumb} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={s.name} numberOfLines={1}>{item.name || '(unnamed)'}</Text>
+                  {kind === 'builds' && (
+                    <Text style={s.buildMeta} numberOfLines={1}>
+                      {statusOf(item)} · {CATS.filter((c) => item.parts?.[c]?.name).length}/{CATS.length} parts
+                    </Text>
+                  )}
+                </View>
                 <Pill status={kind === 'builds' ? statusOf(item) : item.status || 'In Stock'} styles={s} />
               </View>
               <View style={s.rowBottom}>
@@ -801,7 +814,7 @@ function SettingsScreen({
   onClose,
   styles: s,
 }) {
-  const st = data.settings || {};
+  const st = { ...EMPTY.settings, ...(data.settings || {}) };
   const [key, setKey] = useState('');
   const [paste, setPaste] = useState(null);
   const [range, setRange] = useState('year');
@@ -1788,6 +1801,16 @@ function DetailsTab({ b, setB, styles: s }) {
         } },
     ]);
   };
+  const tracking = String(b.trackingNumber || '').trim();
+  const trackingUrl = tracking ? `https://www.17track.net/en?nums=${encodeURIComponent(tracking)}` : '';
+  const openTracking = async () => {
+    if (!trackingUrl) return;
+    try {
+      await Linking.openURL(trackingUrl);
+    } catch (e) {
+      Alert.alert('Could not open tracking', 'Check the tracking number and try again.');
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
@@ -1807,6 +1830,20 @@ function DetailsTab({ b, setB, styles: s }) {
       </View>
       <Text style={s.sub}>Test notes (temps, scores, serials)</Text>
       <TextInput style={[s.input, { height: 90 }]} multiline value={b.testNotes || ''} onChangeText={(t) => setB((p) => ({ ...p, testNotes: t }))} />
+
+      <Text style={s.sub}>Tracking number</Text>
+      <TextInput
+        style={s.input}
+        placeholder="Enter carrier tracking number"
+        autoCapitalize="characters"
+        value={b.trackingNumber || ''}
+        onChangeText={(t) => setB((p) => ({ ...p, trackingNumber: t }))}
+      />
+      {tracking && (
+        <TouchableOpacity onPress={openTracking} style={{ marginTop: -6, marginBottom: 12 }}>
+          <Text style={s.link}>Open tracking for {tracking} ›</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={s.catHeader}><Text style={s.sec}>PHOTOS ({photos.length})</Text></View>
       <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -2560,6 +2597,9 @@ const makeStyles = (c) => {
     rowTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     rowBottom: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 10 },
     rowRight: { color: c.text, fontSize: 15, fontWeight: '700' },
+    buildRow: { paddingVertical: 18, minHeight: 96 },
+    buildThumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: c.chip },
+    buildMeta: { color: c.sub, fontSize: 12, marginTop: 4 },
     pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
     pillT: { fontSize: 12, fontWeight: '700' },
     name: { color: c.text, fontSize: 17, fontWeight: '600' },
