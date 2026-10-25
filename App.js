@@ -71,7 +71,24 @@ const CATS = [
 ];
 
 // ---- Expenses & subscriptions ----
-const EXP_CATS = ['Tools', 'Supplies', 'Shipping supplies', 'Software', 'Subscription', 'Fuel / travel', 'Other'];
+const EXP_CATS = [
+  'Advertising',
+  'Bank / payment fees',
+  'Tools',
+  'Supplies',
+  'Shipping supplies',
+  'Software',
+  'Subscription',
+  'Fuel / travel',
+  'Insurance',
+  'Professional services',
+  'Office expense',
+  'Repairs & maintenance',
+  'Taxes & licenses',
+  'Utilities',
+  'Meals',
+  'Other',
+];
 const FREQ = { none: 'One-time', weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Every 3 months', yearly: 'Yearly' };
 const STEP = { monthly: 1, quarterly: 3, yearly: 12 };
 const PER_MONTH = { none: 0, weekly: 52 / 12, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12 };
@@ -192,16 +209,9 @@ const expenseTotal = (list, from, to) => list.reduce((a, e) => a + n(e.amount) *
 const CHECKLIST = [
   'Powers on / POST / BIOS',
   'OS installed and activated',
-  'CPU stress test passed',
-  'GPU stress test passed',
-  'Temps in a safe range',
-  'RAM running at rated speed',
-  'Storage health checked',
-  'Fans and RGB all working',
-  'Front and rear ports tested',
-  'Wi-Fi and Bluetooth working',
-  'Cleaned and cosmetics checked',
-  'Serial numbers recorded',
+  'Stress tests passed',
+  'Temps under control',
+  'Wi-Fi, drivers, software all working',
 ];
 const GREEN = '#1e8e3e';
 const RED = '#c0392b';
@@ -501,6 +511,13 @@ export default function App() {
           kind="inventory"
           onOpen={setEdit}
           hideSoldInAll={prefs.hideSoldInAll}
+          usedInventoryPartIds={new Set(
+            (data.builds || []).flatMap((b) =>
+              Object.values(b.parts || {})
+                .map((part) => part?.partId)
+                .filter(Boolean)
+            )
+          )}
           styles={s}
           sub={(r) => `${r.category ? r.category + ' · ' : ''}qty ${r.quantity || 1} · buy ${money(n(r.buy_price))}` + ageText(itemAge(r), staleLimit)}
           right={(r) => (r.sell_price ? { text: money(n(r.sell_price)) } : null)}
@@ -586,7 +603,7 @@ export default function App() {
   );
 }
 
-const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, sortKey, onSort, styles: s }) => {
+const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, usedInventoryPartIds, sortKey, onSort, styles: s }) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
 
@@ -598,7 +615,13 @@ const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, sortKey, onSort, 
     const catMatch = (r.category || '').toLowerCase().includes(query);
     const skuMatch = (r.sku || '').toLowerCase().includes(query);
     const status = kind === 'builds' ? statusOf(r) : r.status || 'In Stock';
-    const filterMatch = filter === 'All' ? !hideSoldInAll || status !== 'Sold' : status === filter;
+    const filterMatch =
+      filter === 'All'
+        ? !(
+            kind === 'inventory' &&
+            (status === 'Sold' || (hideSoldInAll && usedInventoryPartIds?.has(r.id)))
+          )
+        : status === filter;
     return (nameMatch || catMatch || skuMatch) && filterMatch;
   });
   const filteredRows = kind === 'builds' ? sortBuilds(filtered, sortKey || 'newest') : filtered;
@@ -1024,7 +1047,7 @@ function SettingsScreen({
               { justifyContent: 'space-between', marginTop: 8 },
             ]}>
             <Text style={[s.name, { flex: 1, paddingRight: 8 }]}>
-              Hide parts in sold builds in "All"
+              Hide parts used in builds in Inventory "All"
             </Text>
             <Switch
               value={!!st.hideSoldInAll}
@@ -1108,7 +1131,7 @@ function SettingsScreen({
           </TouchableOpacity>
 
           <Text style={s.sec}>EXPORT FOR TAXES</Text>
-          <Text style={s.sub}>A CSV of sold builds and expenses for the range you pick.</Text>
+          <Text style={s.sub}>A bookkeeping CSV with sales, cost of goods sold, categorized expenses, inventory basis, and a Schedule C-oriented summary. Review it with your tax professional before filing.</Text>
           <MenuButton
             styles={s}
             style={[s.unit, { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }]}
@@ -1118,7 +1141,7 @@ function SettingsScreen({
             onPick={setRange}
           />
           <TouchableOpacity style={s.btn} onPress={() => shareCsv(buildCsv(data, range), rangeFor(range).label)}>
-            <Text style={s.btnT}>Export sales & expenses (CSV)</Text>
+            <Text style={s.btnT}>Export tax bookkeeping report (CSV)</Text>
           </TouchableOpacity>
 
           <Text style={s.sec}>IMPORT</Text>
@@ -1947,30 +1970,99 @@ const RANGE_LABELS = { month: 'This month', lastmonth: 'Last month', year: 'This
 const csvCell = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
 const csvRow = (a) => a.map(csvCell).join(',');
 const iso = (t) => new Date(t).toISOString().slice(0, 10);
+const TAX_EXPENSE_LINES = {
+  Advertising: 'Schedule C line 8 - Advertising',
+  'Bank / payment fees': 'Schedule C line 27a - Other expenses: bank/payment fees',
+  Tools: 'Schedule C line 22 - Supplies (tools)',
+  Supplies: 'Schedule C line 22 - Supplies',
+  'Shipping supplies': 'Schedule C line 27a - Other expenses: shipping supplies',
+  Software: 'Schedule C line 18 - Office expense (software)',
+  Subscription: 'Schedule C line 18 - Office expense (subscriptions)',
+  'Fuel / travel': 'Schedule C lines 9/24a - Car and truck or travel (review)',
+  Insurance: 'Schedule C line 15 - Insurance',
+  'Professional services': 'Schedule C line 17 - Legal and professional services',
+  'Office expense': 'Schedule C line 18 - Office expense',
+  'Repairs & maintenance': 'Schedule C line 21 - Repairs and maintenance',
+  'Taxes & licenses': 'Schedule C line 23 - Taxes and licenses',
+  Utilities: 'Schedule C line 25 - Utilities',
+  Meals: 'Schedule C line 24b - Deductible meals (review limits)',
+  Other: 'Schedule C line 27a - Other expenses (review)',
+};
+
+function taxExpenseLine(category) {
+  return TAX_EXPENSE_LINES[category] || TAX_EXPENSE_LINES.Other;
+}
 
 function buildCsv(data, range) {
   const { from, to } = rangeFor(range);
-  const rows = [csvRow(['SALES']), csvRow(['Date sold', 'SKU', 'Build', 'Sale price', 'Parts cost', 'Fees', 'Shipping', 'Refund/loss', 'Profit'])];
-  const tot = { sp: 0, cost: 0, fee: 0, ship: 0, loss: 0, profit: 0 };
-  (data.builds || [])
+  const rows = [
+    csvRow(['COMPUTER SALES BUSINESS TAX BOOKKEEPING REPORT']),
+    csvRow(['Period', rangeFor(range).label]),
+    csvRow(['Prepared', iso(Date.now())]),
+    csvRow(['Important', 'Bookkeeping support only; review classification, basis, depreciation, mileage, meals, inventory, and filing method with a qualified tax professional.']),
+    '',
+  ];
+  const sold = (data.builds || [])
     .filter((b) => statusOf(b) === 'Sold')
     .map((b) => ({ b, r: buildProfit(b), t: b.soldAt || b.id }))
     .filter((x) => x.t >= from && x.t <= to)
-    .sort((a, b) => a.t - b.t)
-    .forEach(({ b, r, t }) => {
-      rows.push(csvRow([iso(t), b.sku, b.name, r.sp.toFixed(2), r.cost.toFixed(2), r.fee.toFixed(2), r.ship.toFixed(2), r.loss.toFixed(2), r.profit.toFixed(2)]));
-      Object.keys(tot).forEach((k) => { tot[k] += r[k]; });
-    });
-  rows.push(csvRow(['TOTAL', '', '', tot.sp.toFixed(2), tot.cost.toFixed(2), tot.fee.toFixed(2), tot.ship.toFixed(2), tot.loss.toFixed(2), tot.profit.toFixed(2)]), '');
-  rows.push(csvRow(['EXPENSES']), csvRow(['Date', 'Name', 'Category', 'Amount', 'Repeats', 'Build']));
+    .sort((a, b) => a.t - b.t);
+  const sales = { gross: 0, cost: 0, fee: 0, ship: 0, loss: 0, profit: 0 };
+  rows.push(csvRow(['SALES AND COST OF GOODS SOLD']));
+  rows.push(csvRow(['Date sold', 'SKU', 'Build', 'Gross receipts', 'COGS - parts', 'Platform/payment fees', 'Shipping/fulfillment', 'Refunds/losses', 'Build profit']));
+  sold.forEach(({ b, r, t }) => {
+    rows.push(csvRow([iso(t), b.sku, b.name, r.sp.toFixed(2), r.cost.toFixed(2), r.fee.toFixed(2), r.ship.toFixed(2), r.loss.toFixed(2), r.profit.toFixed(2)]));
+    sales.gross += r.sp;
+    sales.cost += r.cost;
+    sales.fee += r.fee;
+    sales.ship += r.ship;
+    sales.loss += r.loss;
+    sales.profit += r.profit;
+  });
+  rows.push(csvRow(['TOTAL', '', '', sales.gross.toFixed(2), sales.cost.toFixed(2), sales.fee.toFixed(2), sales.ship.toFixed(2), sales.loss.toFixed(2), sales.profit.toFixed(2)]), '');
+
+  rows.push(csvRow(['OPERATING EXPENSES']));
+  rows.push(csvRow(['Date', 'Name', 'App category', 'Suggested Schedule C treatment', 'Amount', 'Repeats', 'Build']));
   const lines = [];
   (data.expenses || []).forEach((e) => charges(e, from, to).forEach((t) => lines.push({ t, e })));
-  let expTotal = 0;
+  const expenseTotals = {};
   lines.sort((a, b) => a.t - b.t).forEach(({ t, e }) => {
-    rows.push(csvRow([iso(t), e.name, e.category, n(e.amount).toFixed(2), FREQ[e.recurring || 'none'], e.buildName || '']));
-    expTotal += n(e.amount);
+    const amount = n(e.amount);
+    const category = e.category || 'Other';
+    rows.push(csvRow([iso(t), e.name, category, taxExpenseLine(category), amount.toFixed(2), FREQ[e.recurring || 'none'], e.buildName || '']));
+    expenseTotals[category] = (expenseTotals[category] || 0) + amount;
   });
-  rows.push(csvRow(['TOTAL', '', '', expTotal.toFixed(2)]), '', csvRow(['NET PROFIT (sales profit minus expenses)', (tot.profit - expTotal).toFixed(2)]));
+  const expTotal = Object.values(expenseTotals).reduce((a, v) => a + v, 0);
+  rows.push(csvRow(['TOTAL', '', '', '', expTotal.toFixed(2)]), '');
+
+  rows.push(csvRow(['SCHEDULE C-ORIENTED SUMMARY']));
+  rows.push(csvRow(['Concept', 'Amount', 'Suggested line / treatment']));
+  rows.push(csvRow(['Gross receipts from sold builds', sales.gross.toFixed(2), 'Schedule C line 1 - Gross receipts or sales']));
+  rows.push(csvRow(['Returns/refunds/losses recorded against sales', sales.loss.toFixed(2), 'Review whether treated as returns/allowances or other expense']));
+  rows.push(csvRow(['Cost of goods sold - parts in sold builds', sales.cost.toFixed(2), 'Schedule C Part III - Cost of goods sold']));
+  rows.push(csvRow(['Gross profit before operating expenses', (sales.gross - sales.loss - sales.cost).toFixed(2), 'Schedule C line 7 - Gross income']));
+  rows.push(csvRow(['Platform/payment fees', sales.fee.toFixed(2), TAX_EXPENSE_LINES['Bank / payment fees']]));
+  rows.push(csvRow(['Shipping/fulfillment on sold builds', sales.ship.toFixed(2), TAX_EXPENSE_LINES['Shipping supplies']]));
+  Object.keys(expenseTotals).sort().forEach((category) => rows.push(csvRow([`Operating expense - ${category}`, expenseTotals[category].toFixed(2), taxExpenseLine(category)])));
+  rows.push(csvRow(['Total operating expenses including sale fees/shipping', (expTotal + sales.fee + sales.ship).toFixed(2), 'Review classification before filing']));
+  rows.push(csvRow(['Book profit after recorded expenses', (sales.gross - sales.loss - sales.cost - expTotal - sales.fee - sales.ship).toFixed(2), 'Not a completed tax return']));
+  rows.push('');
+
+  rows.push(csvRow(['INVENTORY AND BASIS (NOT AUTOMATICALLY EXPENSED)']));
+  rows.push(csvRow(['Added date', 'Item', 'Category', 'Status', 'Quantity', 'Unit cost', 'Extended cost', 'Treatment note']));
+  (data.inventory || []).filter((p) => p.id >= from && p.id <= to).sort((a, b) => a.id - b.id).forEach((p) => {
+    const qty = n(p.quantity) || 1;
+    const unit = n(p.buy_price);
+    rows.push(csvRow([iso(p.id), p.name, p.category || 'Etc.', p.status || 'In Stock', qty, unit.toFixed(2), (qty * unit).toFixed(2), 'Inventory basis; generally flows to COGS when sold, subject to accounting method']));
+  });
+  rows.push('');
+  rows.push(csvRow(['DATA REVIEW FLAGS']));
+  rows.push(csvRow(['Check', 'Details']));
+  if (sold.some(({ b }) => !b.soldAt)) rows.push(csvRow(['Missing sale date', 'One or more sold builds use the build creation date as a fallback.']));
+  if ((data.inventory || []).some((p) => p.status === 'Sold' && !n(p.sell_price))) rows.push(csvRow(['Inventory sold separately', 'Sold inventory items without a sale price need separate revenue records.']));
+  if (lines.some(({ e }) => e.category === 'Fuel / travel')) rows.push(csvRow(['Mileage/travel review', 'Fuel/travel expenses may require mileage, business purpose, and substantiation.']));
+  if (lines.some(({ e }) => e.category === 'Meals')) rows.push(csvRow(['Meals review', 'Deductibility and limits vary; retain receipts and business purpose.']));
+  rows.push(csvRow(['Tax professional review', 'Confirm entity type, accounting method, inventory method, depreciation, home office, mileage, and Schedule SE implications.']));
   return rows.join('\n');
 }
 
