@@ -25,6 +25,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
+import * as Clipboard from 'expo-clipboard';
 
 // Optional packages: if one isn't installed in Snack yet, the app still opens and that feature tells you what to add.
 let SecureStore = null;
@@ -279,6 +280,13 @@ const buildProfit = (b) => {
     profit,
     margin: sp > 0 ? (profit / sp) * 100 : 0,
   };
+
+  async function copyText(value, label) {
+    if (!value) return;
+    await Clipboard.setStringAsync(String(value));
+    bump();
+    Alert.alert('Copied', `${label} copied to the clipboard.`);
+  }
 };
 
 const EMPTY = {
@@ -405,6 +413,12 @@ export default function App() {
     setEdit(null);
   };
 
+  const quickUpdateBuild = (build, patch) => {
+    const next = { ...build, ...patch, updatedAt: Date.now() };
+    if (patch.status === 'Sold' && !next.soldAt) next.soldAt = Date.now();
+    saveBuild(next);
+  };
+
   const removeBuild = (id) => {
     const target = data.builds.find((b) => b.id === id);
     const assignedIds = target
@@ -473,6 +487,8 @@ export default function App() {
             setTab(k);
           }}
           onOpen={setEdit}
+          onQuickAction={quickUpdateBuild}
+          onDuplicate={duplicateBuild}
           onNew={(kind) =>
             setEdit({
               kind,
@@ -496,6 +512,8 @@ export default function App() {
           rows={data.builds}
           kind="builds"
           onOpen={setEdit}
+          onQuickAction={quickUpdateBuild}
+          onDuplicate={duplicateBuild}
           hideSoldInAll={prefs.hideSoldInAll}
           sortKey={prefs.buildSort || 'newest'}
           onSort={(k) => setPrefs({ buildSort: k })}
@@ -606,7 +624,7 @@ export default function App() {
   );
 }
 
-const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, usedInventoryPartIds, sortKey, onSort, styles: s }) => {
+const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hideSoldInAll, usedInventoryPartIds, sortKey, onSort, styles: s }) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
 
@@ -628,6 +646,42 @@ const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, usedInventoryPart
     return (nameMatch || catMatch || skuMatch) && filterMatch;
   });
   const filteredRows = kind === 'builds' ? sortBuilds(filtered, sortKey || 'newest') : filtered;
+
+  const [quickMenu, setQuickMenu] = useState(null);
+  const quickMenuY = useRef(new Animated.Value(8)).current;
+  const quickMenuOpacity = useRef(new Animated.Value(0)).current;
+
+  const showQuickActions = (item, event) => {
+    if (kind !== 'builds') return;
+    const { pageX, pageY } = event.nativeEvent;
+    const { height: screenHeight } = Dimensions.get('window');
+    const menuHeight = 220;
+    const top = pageY + 12 + menuHeight < screenHeight - 24 ? pageY + 12 : pageY - menuHeight - 12;
+    quickMenuY.setValue(8);
+    quickMenuOpacity.setValue(0);
+    bump();
+    setQuickMenu({ item, top, left: Math.max(12, Math.min(pageX - 24, Dimensions.get('window').width - 232)) });
+  };
+
+  useEffect(() => {
+    if (!quickMenu) return;
+    Animated.parallel([
+      Animated.spring(quickMenuY, { toValue: 0, tension: 260, friction: 18, useNativeDriver: true }),
+      Animated.timing(quickMenuOpacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
+  }, [quickMenu]);
+
+  const closeQuickMenu = () => setQuickMenu(null);
+  const runQuickAction = (action) => {
+    const item = quickMenu?.item;
+    closeQuickMenu();
+    if (!item) return;
+    tick();
+    if (action === 'edit') onOpen({ kind, rec: item });
+    if (action === 'duplicate') onDuplicate(item);
+    if (action === 'listed') onQuickAction(item, { status: 'Listed', listedAt: item.listedAt || Date.now() });
+    if (action === 'sold') onQuickAction(item, { status: 'Sold', soldAt: item.soldAt || Date.now() });
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -671,7 +725,7 @@ const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, usedInventoryPart
         renderItem={({ item }) => {
           const r = right ? right(item) : null;
           return (
-            <TouchableOpacity style={[s.row, kind === 'builds' && s.buildRow]} activeOpacity={0.7} onPress={() => onOpen({ kind, rec: item })}>
+            <TouchableOpacity style={[s.row, kind === 'builds' && s.buildRow]} activeOpacity={0.7} onPress={() => onOpen({ kind, rec: item })} onLongPress={(event) => showQuickActions(item, event)} delayLongPress={350}>
               <View style={s.rowTop}>
                 {kind === 'builds' && item.photos?.[0] && (
                   <Image source={{ uri: photoUri(item.photos[0]) }} style={s.buildThumb} />
@@ -694,6 +748,46 @@ const List = ({ rows, kind, onOpen, sub, right, hideSoldInAll, usedInventoryPart
           );
         }}
       />
+      {quickMenu && (
+        <Modal transparent animationType="none" onRequestClose={closeQuickMenu}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeQuickMenu}>
+            <Animated.View
+              style={[
+                s.quickMenuShade,
+                { opacity: quickMenuOpacity },
+              ]}
+            />
+          </Pressable>
+          <Animated.View
+            style={[
+              s.quickMenu,
+              {
+                top: quickMenu.top,
+                left: quickMenu.left,
+                opacity: quickMenuOpacity,
+                transform: [{ translateY: quickMenuY }],
+              },
+            ]}>
+            <Text style={s.quickMenuTitle} numberOfLines={1}>{quickMenu.item.name || 'Build actions'}</Text>
+            <TouchableOpacity style={s.quickMenuRow} onPress={() => runQuickAction('edit')}>
+              <Text style={s.quickMenuText}>Edit build</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.quickMenuRow} onPress={() => runQuickAction('duplicate')}>
+              <Text style={s.quickMenuText}>Duplicate build</Text>
+            </TouchableOpacity>
+            {statusOf(quickMenu.item) !== 'Listed' && (
+              <TouchableOpacity style={s.quickMenuRow} onPress={() => runQuickAction('listed')}>
+                <Text style={s.quickMenuText}>Mark as listed</Text>
+              </TouchableOpacity>
+            )}
+            {statusOf(quickMenu.item) !== 'Sold' && (
+              <TouchableOpacity style={s.quickMenuRow} onPress={() => runQuickAction('sold')}>
+                <Text style={s.quickMenuText}>Mark as sold</Text>
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -1457,12 +1551,15 @@ function BuildEditor({
             />
 
             <Text style={s.sub}>SKU (Auto-generated)</Text>
-            <TextInput
-              style={s.input}
-              placeholder="e.g. 2610-4070-5600-01"
-              value={b.sku || ''}
-              onChangeText={(t) => setB({ ...b, sku: t })}
-            />
+            <View style={s.copyRow}>
+              <TextInput
+                style={[s.input, { flex: 1 }]}
+                placeholder="e.g. 2610-4070-5600-01"
+                value={b.sku || ''}
+                onChangeText={(t) => setB({ ...b, sku: t })}
+              />
+              {!!b.sku && <TouchableOpacity style={s.copyBtn} onPress={() => copyText(b.sku, 'SKU')}><Text style={s.copyT}>Copy</Text></TouchableOpacity>}
+            </View>
 
             {CATS.map((c) => {
               const currentPartId = b.parts?.[c]?.partId;
@@ -1833,6 +1930,16 @@ function DetailsTab({ b, setB, styles: s }) {
       <Text style={s.sub}>Test notes (temps, scores, serials)</Text>
       <TextInput style={[s.input, { height: 90 }]} multiline value={b.testNotes || ''} onChangeText={(t) => setB((p) => ({ ...p, testNotes: t }))} />
 
+      <Text style={s.sub}>System serial number</Text>
+      <TextInput
+        style={s.input}
+        placeholder="Optional serial number"
+        autoCapitalize="characters"
+        value={b.serialNumber || ''}
+        onChangeText={(t) => setB((p) => ({ ...p, serialNumber: t }))}
+      />
+      {!!b.serialNumber && <TouchableOpacity style={s.copyBtn} onPress={() => copyText(b.serialNumber, 'Serial number')}><Text style={s.copyT}>Copy serial number</Text></TouchableOpacity>}
+
       <Text style={s.sub}>Tracking number</Text>
       <TextInput
         style={s.input}
@@ -1842,9 +1949,12 @@ function DetailsTab({ b, setB, styles: s }) {
         onChangeText={(t) => setB((p) => ({ ...p, trackingNumber: t }))}
       />
       {tracking && (
-        <TouchableOpacity onPress={openTracking} style={{ marginTop: -6, marginBottom: 12 }}>
-          <Text style={s.link}>Open tracking for {tracking} ›</Text>
-        </TouchableOpacity>
+        <View style={[s.copyRow, { marginTop: -6, marginBottom: 12 }]}>
+          <TouchableOpacity onPress={openTracking} style={{ flex: 1 }}>
+            <Text style={s.link}>Open tracking for {tracking} ›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.copyBtn} onPress={() => copyText(tracking, 'Tracking number')}><Text style={s.copyT}>Copy</Text></TouchableOpacity>
+        </View>
       )}
 
       <View style={s.catHeader}><Text style={s.sec}>PHOTOS ({photos.length})</Text></View>
@@ -2391,6 +2501,16 @@ function Home({ data, styles: s, goTab, onOpen, onNew, onProfit, onOffer, onExpe
   const lastB = data.settings?.lastBackupAt;
   const backupDue = builds.length + inv.length + (data.expenses || []).length > 0 && (!lastB || daysSince(lastB) >= 14);
 
+  const attention = builds.flatMap((b) => {
+    const issues = [];
+    const status = statusOf(b);
+    if (status === 'Listed' && !(b.photos || []).length) issues.push('Add listing photos');
+    if (status === 'Sold' && !b.soldAt) issues.push('Add sale date');
+    if (status === 'Sold' && !(n(b.sell?.price) > 0)) issues.push('Add sale price');
+    if ((status === 'Listed' || status === 'Sold') && !String(b.trackingNumber || '').trim()) issues.push('Add tracking number');
+    return issues.map((issue) => ({ key: `${b.id}-${issue}`, b, issue }));
+  }).slice(0, 4);
+
   // Lists
   const recent = [...builds].sort((a, b) => (b.updatedAt || b.id || 0) - (a.updatedAt || a.id || 0)).slice(0, 4);
   const stock = inv.filter((p) => (p.status || 'In Stock') === 'In Stock');
@@ -2418,6 +2538,21 @@ function Home({ data, styles: s, goTab, onOpen, onNew, onProfit, onOffer, onExpe
             {lastB ? `Your last backup was ${daysSince(lastB)} days ago.` : "You haven't made a backup yet."} Tap to open Settings.
           </Text>
         </TouchableOpacity>
+      )}
+      {attention.length > 0 && (
+        <View style={s.attentionCard}>
+          <View style={s.catHeader}>
+            <Text style={s.sec}>NEEDS ATTENTION</Text>
+            <Text style={s.sub}>{attention.length}</Text>
+          </View>
+          {attention.map(({ key, b, issue }) => (
+            <TouchableOpacity key={key} style={s.attentionRow} onPress={() => onOpen({ kind: 'builds', rec: b })}>
+              <View style={s.attentionDot} />
+              <Text style={[s.name, { flex: 1, fontSize: 15 }]} numberOfLines={1}>{b.name || '(unnamed)'}</Text>
+              <Text style={s.attentionIssue}>{issue}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       )}
       <TouchableOpacity activeOpacity={0.7} style={s.card} onPress={onProfit}>
         <Text style={s.sub}>{monthName.toUpperCase()}</Text>
@@ -2602,6 +2737,10 @@ const makeStyles = (c) => {
     buildRow: { paddingVertical: 18, minHeight: 96 },
     buildThumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: c.chip },
     buildMeta: { color: c.sub, fontSize: 12, marginTop: 4 },
+    attentionCard: { backgroundColor: c.card, padding: 15, borderRadius: 16, marginBottom: 10, ...lift },
+    attentionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 },
+    attentionDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#F59E0B' },
+    attentionIssue: { color: c.sub, fontSize: 12 },
     pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
     pillT: { fontSize: 12, fontWeight: '700' },
     name: { color: c.text, fontSize: 17, fontWeight: '600' },
@@ -2616,6 +2755,9 @@ const makeStyles = (c) => {
     sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.card, borderRadius: 12, paddingHorizontal: 14, height: 44 },
     sortT: { color: c.link, fontSize: 15, fontWeight: '600' },
     input: { color: c.text, backgroundColor: c.card, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, paddingVertical: 11, paddingHorizontal: 12, fontSize: 16, marginBottom: 10, marginTop: 5 },
+    copyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    copyBtn: { backgroundColor: c.chip, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 10 },
+    copyT: { color: c.link, fontSize: 13, fontWeight: '700' },
     btn: { backgroundColor: c.btn, paddingVertical: 15, borderRadius: 14, marginTop: 12 },
     btnT: { color: '#fff', textAlign: 'center', fontWeight: '600', fontSize: 16 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 8 },
@@ -2671,5 +2813,10 @@ const makeStyles = (c) => {
     popRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 52, paddingHorizontal: 22 },
     popSep: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.18)' },
     popT: { color: '#fff', fontSize: 17 },
+    quickMenuShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.16)' },
+    quickMenu: { position: 'absolute', width: 220, paddingVertical: 7, paddingHorizontal: 6, borderRadius: 18, backgroundColor: c.card, ...lift },
+    quickMenuTitle: { color: c.sub, fontSize: 12, fontWeight: '700', paddingHorizontal: 12, paddingVertical: 8 },
+    quickMenuRow: { minHeight: 42, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12 },
+    quickMenuText: { color: c.text, fontSize: 16, fontWeight: '600' },
   });
 };
