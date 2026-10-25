@@ -42,6 +42,13 @@ let DocPicker = null;
 try { DocPicker = require('expo-document-picker'); } catch (e) {}
 let XLSX = null;
 try { XLSX = require('xlsx'); } catch (e) {}
+let Constants = null;
+try { Constants = require('expo-constants').default; } catch (e) {}
+let ContextMenu = null;
+const runningInExpoGo = Constants?.executionEnvironment === 'storeClient' || Constants?.appOwnership === 'expo';
+if (!runningInExpoGo) {
+  try { ContextMenu = require('react-native-context-menu-view').default; } catch (e) {}
+}
 const keyStore = {
   get: () =>
     SecureStore
@@ -168,6 +175,14 @@ const BUILD_SORTS = [
   { key: 'profitLow', label: 'Smallest profit' },
   { key: 'name', label: 'Name A to Z' },
 ];
+const INVENTORY_SORTS = [
+  { key: 'newest', label: 'Newest first' },
+  { key: 'oldest', label: 'Oldest first' },
+  { key: 'name', label: 'Name A to Z' },
+  { key: 'costHigh', label: 'Highest cost' },
+  { key: 'costLow', label: 'Lowest cost' },
+  { key: 'status', label: 'Status' },
+];
 // Builds without a sell price have no profit yet, so they always sort to the bottom of the profit views
 function sortBuilds(rows, key) {
   const cost = (b) => buildTotal(b);
@@ -181,6 +196,17 @@ function sortBuilds(rows, key) {
       if (pb == null) return -1;
       return (pa - pb) * dir;
     });
+  }
+  function sortInventory(rows, key) {
+    const by = {
+      newest: (a, b) => b.id - a.id,
+      oldest: (a, b) => a.id - b.id,
+      name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+      costHigh: (a, b) => n(b.buy_price) - n(a.buy_price),
+      costLow: (a, b) => n(a.buy_price) - n(b.buy_price),
+      status: (a, b) => (a.status || 'In Stock').localeCompare(b.status || 'In Stock') || b.id - a.id,
+    };
+    return [...rows].sort(by[key] || by.newest);
   }
   const by = {
     newest: (a, b) => b.id - a.id,
@@ -539,6 +565,8 @@ export default function App() {
                 .filter(Boolean)
             )
           )}
+          sortKey={prefs.inventorySort || 'newest'}
+          onSort={(k) => setPrefs({ inventorySort: k })}
           styles={s}
           sub={(r) => `${r.category ? r.category + ' · ' : ''}qty ${r.quantity || 1} · buy ${money(n(r.buy_price))}` + ageText(itemAge(r), staleLimit)}
           right={(r) => (r.sell_price ? { text: money(n(r.sell_price)) } : null)}
@@ -645,7 +673,9 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
         : status === filter;
     return (nameMatch || catMatch || skuMatch) && filterMatch;
   });
-  const filteredRows = kind === 'builds' ? sortBuilds(filtered, sortKey || 'newest') : filtered;
+  const filteredRows = kind === 'builds'
+    ? sortBuilds(filtered, sortKey || 'newest')
+    : sortInventory(filtered, sortKey || 'newest');
 
   const [quickMenu, setQuickMenu] = useState(null);
   const quickMenuY = useRef(new Animated.Value(8)).current;
@@ -672,15 +702,18 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
   }, [quickMenu]);
 
   const closeQuickMenu = () => setQuickMenu(null);
-  const runQuickAction = (action) => {
-    const item = quickMenu?.item;
-    closeQuickMenu();
+  const applyQuickAction = (item, action) => {
     if (!item) return;
     tick();
     if (action === 'edit') onOpen({ kind, rec: item });
     if (action === 'duplicate') onDuplicate(item);
     if (action === 'listed') onQuickAction(item, { status: 'Listed', listedAt: item.listedAt || Date.now() });
     if (action === 'sold') onQuickAction(item, { status: 'Sold', soldAt: item.soldAt || Date.now() });
+  };
+  const runQuickAction = (action) => {
+    const item = quickMenu?.item;
+    closeQuickMenu();
+    applyQuickAction(item, action);
   };
 
   return (
@@ -691,13 +724,13 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
             <Icon name="search" size={17} color={P.sub} />
             <TextInput style={s.searchInput} placeholder={`Search ${kind}`} placeholderTextColor={P.sub} value={search} onChangeText={setSearch} clearButtonMode="while-editing" />
           </View>
-          {kind === 'builds' && (
+          {(kind === 'builds' || kind === 'inventory') && (
             <MenuButton
               styles={s}
               align="right"
               style={s.sortBtn}
               label={<><Icon name="swap-vertical" size={17} color={P.link} /><Text style={s.sortT}>Sort</Text></>}
-              options={BUILD_SORTS}
+              options={kind === 'builds' ? BUILD_SORTS : INVENTORY_SORTS}
               selected={sortKey || 'newest'}
               onPick={onSort}
             />
@@ -724,8 +757,13 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
         }
         renderItem={({ item }) => {
           const r = right ? right(item) : null;
-          return (
-            <TouchableOpacity style={[s.row, kind === 'builds' && s.buildRow]} activeOpacity={0.7} onPress={() => onOpen({ kind, rec: item })} onLongPress={(event) => showQuickActions(item, event)} delayLongPress={350}>
+          const row = (
+            <TouchableOpacity
+              style={[s.row, kind === 'builds' && s.buildRow]}
+              activeOpacity={0.7}
+              onPress={() => onOpen({ kind, rec: item })}
+              onLongPress={ContextMenu ? undefined : (event) => showQuickActions(item, event)}
+              delayLongPress={350}>
               <View style={s.rowTop}>
                 {kind === 'builds' && item.photos?.[0] && (
                   <Image source={{ uri: photoUri(item.photos[0]) }} style={s.buildThumb} />
@@ -745,6 +783,26 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
                 {r && <Text style={[s.rowRight, r.color && { color: r.color }]}>{r.text}</Text>}
               </View>
             </TouchableOpacity>
+          );
+          const nativeActions = [
+            { title: 'Edit build', action: 'edit' },
+            { title: 'Duplicate build', action: 'duplicate' },
+            ...(statusOf(item) !== 'Listed' ? [{ title: 'Mark as listed', action: 'listed' }] : []),
+            ...(statusOf(item) !== 'Sold' ? [{ title: 'Mark as sold', action: 'sold' }] : []),
+          ];
+          return (
+            kind === 'builds' && ContextMenu ? (
+              <ContextMenu
+                key={String(item.id)}
+                title={item.name || 'Build actions'}
+                actions={nativeActions.map((o) => ({ title: o.title }))}
+                onPress={(event) => {
+                  const action = nativeActions[event.nativeEvent.index];
+                  if (action) applyQuickAction(item, action.action);
+                }}>
+                {row}
+              </ContextMenu>
+            ) : row
           );
         }}
       />
@@ -862,13 +920,32 @@ function MenuButton({
     box = { left, width: W, top: below ? pos.y + pos.h + 8 : pos.y - H - 8 };
   }
 
+  const trigger = (
+    <View ref={ref} collapsable={false} style={{ marginBottom }}>
+      <TouchableOpacity style={inner} onPress={ContextMenu ? undefined : open}>
+        {label}
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <>
-      <View ref={ref} collapsable={false} style={{ marginBottom }}>
-        <TouchableOpacity style={inner} onPress={open}>
-          {label}
-        </TouchableOpacity>
-      </View>
+      {ContextMenu ? (
+        <ContextMenu
+          dropdownMenuMode
+          actions={options.map((o) => ({
+            title: o.label,
+            selected: selected === o.key,
+          }))}
+          onPress={(event) => {
+            const option = options[event.nativeEvent.index];
+            if (!option) return;
+            tick();
+            onPick(option.key);
+          }}>
+          {trigger}
+        </ContextMenu>
+      ) : trigger}
       {pos && (
         <Modal transparent animationType="none" onRequestClose={close}>
           <Pressable style={StyleSheet.absoluteFill} onPress={close} />
