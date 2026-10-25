@@ -197,17 +197,6 @@ function sortBuilds(rows, key) {
       return (pa - pb) * dir;
     });
   }
-  function sortInventory(rows, key) {
-    const by = {
-      newest: (a, b) => b.id - a.id,
-      oldest: (a, b) => a.id - b.id,
-      name: (a, b) => (a.name || '').localeCompare(b.name || ''),
-      costHigh: (a, b) => n(b.buy_price) - n(a.buy_price),
-      costLow: (a, b) => n(a.buy_price) - n(b.buy_price),
-      status: (a, b) => (a.status || 'In Stock').localeCompare(b.status || 'In Stock') || b.id - a.id,
-    };
-    return [...rows].sort(by[key] || by.newest);
-  }
   const by = {
     newest: (a, b) => b.id - a.id,
     oldest: (a, b) => a.id - b.id,
@@ -221,6 +210,18 @@ function sortBuilds(rows, key) {
     costHigh: (a, b) => cost(b) - cost(a),
     costLow: (a, b) => cost(a) - cost(b),
     name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+  };
+  return [...rows].sort(by[key] || by.newest);
+}
+
+function sortInventory(rows, key) {
+  const by = {
+    newest: (a, b) => (b.id || 0) - (a.id || 0),
+    oldest: (a, b) => (a.id || 0) - (b.id || 0),
+    name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+    costHigh: (a, b) => n(b.buy_price) - n(a.buy_price),
+    costLow: (a, b) => n(a.buy_price) - n(b.buy_price),
+    status: (a, b) => (a.status || 'In Stock').localeCompare(b.status || 'In Stock') || (b.id || 0) - (a.id || 0),
   };
   return [...rows].sort(by[key] || by.newest);
 }
@@ -795,6 +796,7 @@ const List = ({ rows, kind, onOpen, onQuickAction, onDuplicate, sub, right, hide
               <ContextMenu
                 key={String(item.id)}
                 title={item.name || 'Build actions'}
+                previewBackgroundColor={P.card}
                 actions={nativeActions.map((o) => ({ title: o.title }))}
                 onPress={(event) => {
                   const action = nativeActions[event.nativeEvent.index];
@@ -933,6 +935,7 @@ function MenuButton({
       {ContextMenu ? (
         <ContextMenu
           dropdownMenuMode
+          previewBackgroundColor={P.card}
           actions={options.map((o) => ({
             title: o.label,
             selected: selected === o.key,
