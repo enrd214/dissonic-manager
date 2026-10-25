@@ -15,25 +15,31 @@ workflows:
         script: npm ci
       - name: Generate native iOS project
         script: npx expo prebuild --platform ios --no-install
+      - name: Expose Node.js to Xcode scripts
+        script: |
+          NODE_PATH="$(command -v node)"
+          test -x "$NODE_PATH"
+          printf 'export NODE_BINARY=%s\n' "$NODE_PATH" > ios/.xcode.env.local
+          printf 'export PATH=%s:$PATH\n' "$(dirname "$NODE_PATH")" >> ios/.xcode.env.local
       - name: Install CocoaPods dependencies
         script: |
           cd ios
           pod install
-      - name: Build unsigned iOS archive
+      - name: Build unsigned iOS app
         script: |
           mkdir -p build/ios/unsigned
-          xcodebuild archive \
+          xcodebuild build \
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath "$CM_BUILD_DIR/build/ios/unsigned/inventoryapp.xcarchive" \
+            -derivedDataPath "$CM_BUILD_DIR/build/ios/unsigned/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
       - name: Package unsigned IPA
         script: |
-          APP_PATH="$CM_BUILD_DIR/build/ios/unsigned/inventoryapp.xcarchive/Products/Applications/inventoryapp.app"
+          APP_PATH="$CM_BUILD_DIR/build/ios/unsigned/DerivedData/Build/Products/Release-iphoneos/inventoryapp.app"
           PAYLOAD_PATH="$CM_BUILD_DIR/build/ios/unsigned/Payload"
           test -d "$APP_PATH"
           mkdir -p "$PAYLOAD_PATH"
@@ -42,7 +48,7 @@ workflows:
           zip -qry inventoryapp-unsigned.ipa Payload
     artifacts:
       - build/ios/unsigned/inventoryapp-unsigned.ipa
-      - build/ios/unsigned/inventoryapp.xcarchive
+      - build/ios/unsigned/DerivedData/Build/Products/Release-iphoneos/inventoryapp.app
       - /tmp/xcodebuild_logs/*.log
 
   ios-development:

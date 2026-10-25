@@ -47,7 +47,7 @@ The development workflow produces a signed development IPA for registered
 devices. The release workflow produces an App Store-signed IPA. Both workflows
 run Expo prebuild so the native context-menu module is included.
 
-The `ios-unsigned` workflow creates an unsigned IPA-shaped archive without
-Apple signing credentials. It is useful for inspecting or extracting the
-compiled app, but iOS will not install or launch it on a device until it is
-properly signed and provisioned.
+The `ios-unsigned` workflow creates an unsigned IPA-shaped package without
+Apple signing credentials. It builds the `.app` directly with signing disabled,
+then packages it for inspection or extraction. iOS will not install or launch
+it on a device until it is properly signed and provisioned.
