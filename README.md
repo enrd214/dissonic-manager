@@ -40,12 +40,7 @@ npx expo start --dev-client
 
 ## Building with Codemagic
 
-`codemagic.yaml` contains `ios-development` and `ios-release` workflows. In
-Codemagic, create an App Store Connect integration named `codemagic`, add the
-`app_store_connect_credentials` environment group, and connect the repository.
-The release workflow uses App Store distribution signing and publishes through
-the App Store Connect integration.
-
+`codemagic.yaml` contains `ios-development` and `ios-release` workflows.
 The development workflow produces a signed development IPA for registered
 devices. The release workflow produces an App Store-signed IPA. Both workflows
 run Expo prebuild so the native context-menu module is included.
@@ -56,4 +51,4 @@ then packages it for inspection or extraction. iOS will not install or launch
 it on a device until it is properly signed and provisioned.
 
 The Codemagic workflows use Xcode 26.1 because Expo SDK 57's
-`ExpoModulesJSI` dependency requires Swift 6.2.
+ExpoModulesJSI dependency requires Swift 6.2.
