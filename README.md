@@ -1,6 +1,7 @@
 # Computer Sales Manager
 
 A simple app for tracking custom PC builds, parts inventory, and shop expenses. Built with React Native and Expo.
+Tablet support is enabled, but I have not built around it or know how 
 
 ## Running it locally
 
@@ -16,9 +17,6 @@ Make sure you have the EAS CLI installed, log into your Expo account, and run:
 eas build --platform ios --profile preview
 ```
 
-The iOS/Android development build also includes native context menus for build
-quick actions and the Builds/Inventory sorting menus. Expo Go falls back to the
-in-app menu because it cannot load custom native modules.
 
 Build rows use the local `modules/native-context-menu` Expo module, which
 attaches Apple's `UIContextMenuInteraction` directly to each row. The existing
