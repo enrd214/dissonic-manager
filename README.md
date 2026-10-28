@@ -1,4 +1,4 @@
-# Computer Sales Manager
+# Builds
 
 A simple app for tracking custom PC builds, parts inventory, and shop expenses. Built with React Native and Expo.
 Tablet support is enabled, but I have not built around it nor know its functionality. Only iOS for now, you can fork this repo and get that going if you'd like! Built by Dissonic Computers

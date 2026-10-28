@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Build Manager",
+    "name": "Builds",
     "slug": "snack-3778cf34-0cc0-41f4-9b23-8d5dce20caff",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,7 +28,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-icon.png",
+          "image": "./assets/splash-icon-transparent.png",
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }

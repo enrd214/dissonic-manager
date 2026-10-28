@@ -500,7 +500,7 @@ export default function App() {
     <SafeAreaView style={s.root}>
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
       <View style={s.head}>
-        <Text style={s.title}>{tab === 'home' ? '💻 Build Manager' : { builds: 'Builds', inventory: 'Inventory', money: 'Financials' }[tab]}</Text>
+        <Text style={s.title}>{tab === 'home' ? '💻 Builds' : { builds: 'Builds', inventory: 'Inventory', money: 'Financials' }[tab]}</Text>
         <TouchableOpacity style={s.gearBtn} onPress={() => { tick(); setShowSettings(true); }}>
           <Icon name="settings-outline" size={21} color={P.text} />
         </TouchableOpacity>
