@@ -39,10 +39,6 @@ let ImagePicker = null;
 try { ImagePicker = require('expo-image-picker'); } catch (e) {}
 let FS = null;
 try { FS = require('expo-file-system'); } catch (e) {}
-let DocPicker = null;
-try { DocPicker = require('expo-document-picker'); } catch (e) {}
-let XLSX = null;
-try { XLSX = require('xlsx'); } catch (e) {}
 let Constants = null;
 try { Constants = require('expo-constants').default; } catch (e) {}
 let ContextMenu = null;
@@ -1135,32 +1131,6 @@ function SettingsScreen({
       if (res.action === Share.sharedAction) onChange({ lastBackupAt: Date.now() });
     } catch (e) {}
   };
-  const importXlsx = async () => {
-    if (!DocPicker || !XLSX) return Alert.alert('Import needs two packages', 'Add expo-document-picker and xlsx to your Snack dependencies, then try again.');
-    try {
-      const res = await DocPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
-      if (res.canceled) return;
-      const uri = res.assets[0].uri;
-      let bytes;
-      try { bytes = await new FS.File(uri).bytes(); } catch (e) { bytes = new Uint8Array(await (await fetch(uri)).arrayBuffer()); }
-      const wb = XLSX.read(bytes, { type: 'array' });
-      const sheets = {};
-      wb.SheetNames.forEach((nm) => { sheets[nm] = XLSX.utils.sheet_to_json(wb.Sheets[nm], { header: 1, defval: null, raw: true }); });
-      const parsed = parsePandaExport(sheets);
-      if (!parsed.builds.length && !parsed.inventory.length) throw new Error('No Panda Manager sheets (Builds Summary, Builds Detail, Parts Inventory) were found in that file.');
-      const done = (mode) => {
-        onRestore(applyImport(data, parsed, mode));
-        Alert.alert('Imported', `${parsed.builds.length} builds and ${parsed.inventory.length} parts from Panda Manager.${parsed.notes.length ? '\n\n' + parsed.notes.join('\n') : ''}`);
-      };
-      Alert.alert('Import from Panda Manager', `Found ${parsed.builds.length} builds and ${parsed.inventory.length} parts. Importing the same file twice won't create duplicates.`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Add to my data', onPress: () => done('merge') },
-        { text: 'Replace my data', style: 'destructive', onPress: () => done('replace') },
-      ]);
-    } catch (e) {
-      Alert.alert('Could not import', String(e.message || e));
-    }
-  };
   const doRestore = () => {
     try {
       const d = JSON.parse(paste);
@@ -1333,12 +1303,6 @@ function SettingsScreen({
           />
           <TouchableOpacity style={s.btn} onPress={() => shareCsv(buildCsv(data, range), rangeFor(range).label)}>
             <Text style={s.btnT}>Export tax bookkeeping report (CSV)</Text>
-          </TouchableOpacity>
-
-          <Text style={s.sec}>IMPORT</Text>
-          <Text style={s.sub}>Bring in the .xlsx you exported from Panda Manager on your PC.</Text>
-          <TouchableOpacity style={s.btn} onPress={importXlsx}>
-            <Text style={s.btnT}>Import Panda Manager export</Text>
           </TouchableOpacity>
 
           <Text style={s.sec}>BACKUP</Text>
@@ -2069,126 +2033,6 @@ function DetailsTab({ b, setB, styles: s }) {
   );
 }
 
-// ---- Import from the old Panda Manager (Windows) spreadsheet export ----
-const OLD_CATS = { cpu: 'CPU', cooler: 'Cooler', mobo: 'MOBO', ram: 'RAM', storage: 'Storage', gpu: 'GPU', psu: 'PSU', case: 'Case', other: 'Etc.' };
-const oldCat = (c) => OLD_CATS[String(c || '').trim().toLowerCase()] || 'Etc.';
-const PM_SUMMARY_LABELS = ['total cost', 'extra costs', 'shipping out', 'listed price', 'sold price', 'profit'];
-const pmNum = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : null; };
-const pmStr = (v) => { const x = pmNum(v); return x == null || x === 0 ? '' : String(Math.round(x * 100) / 100); };
-const pmStamp = (v) => {
-  if (v instanceof Date) return +v;
-  if (typeof v === 'number' && v > 20000 && v < 80000) return +new Date(1899, 11, 30 + Math.floor(v), 12); // Excel date number
-  const m = String(v == null ? '' : v).match(/(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
-  return m ? +new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 12), +(m[5] || 0), +(m[6] || 0)) : null;
-};
-const pmTable = (rows) => {
-  if (!rows || !rows.length) return [];
-  const head = rows[0].map((h) => String(h == null ? '' : h).trim());
-  return rows.slice(1).filter((r) => r.some((x) => x != null && x !== '')).map((r) => {
-    const o = {};
-    head.forEach((h, i) => { o[h] = r[i] == null ? null : r[i]; });
-    return o;
-  });
-};
-// The app has one slot per category, so a second part in the same category goes into Etc.
-function pmAddSlot(parts, cat, name, price) {
-  const cur = parts[cat];
-  if (!cur) { parts[cat] = { name, price: pmStr(price) }; return; }
-  if (cat !== 'Etc.') return pmAddSlot(parts, 'Etc.', name, price);
-  parts['Etc.'] = { name: [cur.name, name].filter(Boolean).join(' + '), price: pmStr((pmNum(cur.price) || 0) + (price || 0)) };
-}
-
-// sheets = { 'Builds Summary': [[...rows]], 'Builds Detail': [[...]], 'Parts Inventory': [[...]] }
-function parsePandaExport(sheets) {
-  const notes = [];
-  const builds = [];
-  const byName = {};
-
-  pmTable(sheets['Builds Summary']).forEach((r) => {
-    const name = String(r['Name'] || '').trim();
-    if (!name) return;
-    const listed = pmNum(r['Listed Price']) || 0;
-    const sold = pmNum(r['Sell Price']) || 0;
-    const st = String(r['Status'] || '').toLowerCase();
-    const status = st === 'sold' ? 'Sold' : st === 'listed' ? 'Listed' : st.includes('progress') ? 'In progress' : listed > 0 ? 'Listed' : 'In progress';
-    const created = pmStamp(r['Created']) || Date.now();
-    const soldAt = status === 'Sold' ? pmStamp(r['Sold On']) : null;
-    if (status === 'Sold' && !soldAt) notes.push(`"${name}" is sold but has no sold date, so it counts in the month it was created.`);
-    const b = {
-      id: created + (pmNum(r['ID']) || 0),
-      name,
-      status,
-      parts: {},
-      sell: { price: pmStr(sold || listed), fee: '', feeType: '$', shipping: pmStr(r['Shipping Out']), loss: '' },
-      soldAt,
-      listedAt: null,
-      updatedAt: created,
-      testNotes: [status === 'Sold' && r['Buyer'] ? `Sold via ${r['Buyer']}.` : '', r['Notes']].filter(Boolean).join('\n'),
-    };
-    builds.push(b);
-    byName[name] = b;
-  });
-
-  // Builds Detail: one block per build (header row ends in "Price | Market"), then its parts, then totals
-  let cur = null, lastCat = 'Etc.';
-  (sheets['Builds Detail'] || []).forEach((row) => {
-    const [a, nm, price, market] = row;
-    if (price === 'Price' && market === 'Market') {
-      const title = String(a || '').trim();
-      cur = byName[title] || null;
-      lastCat = 'Etc.';
-      if (!cur) notes.push(`Parts for "${title}" were skipped because that build isn't in Builds Summary.`);
-      return;
-    }
-    if (!cur) return;
-    const label = String(a == null ? '' : a).trim().toLowerCase();
-    if (PM_SUMMARY_LABELS.includes(label)) {
-      if (label === 'extra costs') cur.sell.fee = pmStr(price);
-      if (label === 'shipping out' && !cur.sell.shipping) cur.sell.shipping = pmStr(price);
-      return;
-    }
-    const partName = String(nm == null ? '' : nm).trim();
-    if (!partName && pmNum(price) == null) return;
-    const cat = label ? oldCat(a) : lastCat;
-    lastCat = cat;
-    pmAddSlot(cur.parts, cat, partName, pmNum(price));
-  });
-
-  const inventory = [];
-  pmTable(sheets['Parts Inventory']).forEach((r) => {
-    const name = String(r['Name'] || '').trim();
-    if (!name) return;
-    const st = String(r['Status'] || '').toLowerCase();
-    const item = {
-      id: (pmStamp(r['Added']) || Date.now()) + (pmNum(r['ID']) || 0),
-      name,
-      category: oldCat(r['Category']),
-      quantity: String(pmNum(r['Qty']) || 1),
-      buy_price: pmStr(r['Buy Price']),
-      status: st === 'sold' ? 'Sold' : st === 'assigned' ? 'In Build' : st === 'listed' ? 'Listed' : 'In Stock',
-      notes: r['Notes'] ? String(r['Notes']) : '',
-    };
-    inventory.push(item);
-    const b = byName[String(r['Assigned To'] || '').trim()];
-    const slot = b && Object.values(b.parts).find((p) => !p.partId && p.name.toLowerCase() === name.toLowerCase());
-    if (slot) slot.partId = item.id;
-  });
-
-  return { builds, inventory, notes };
-}
-
-// mode: 'merge' keeps what's already in the app (re-importing never duplicates), 'replace' starts over
-function applyImport(data, parsed, mode) {
-  const keepB = mode === 'replace' ? [] : data.builds || [];
-  const keepI = mode === 'replace' ? [] : data.inventory || [];
-  const haveB = new Set(keepB.map((b) => b.id));
-  const haveI = new Set(keepI.map((p) => p.id));
-  const builds = [...keepB];
-  parsed.builds.filter((b) => !haveB.has(b.id)).sort((a, b) => a.id - b.id).forEach((b) => builds.push({ ...b, sku: generateSku(b, builds, new Date(b.id)) }));
-  const inventory = [...keepI, ...parsed.inventory.filter((p) => !haveI.has(p.id))];
-  return { ...data, builds, inventory };
-}
-
 // ---- CSV export for taxes ----
 function rangeFor(key) {
   const now = new Date(), y = now.getFullYear(), m = now.getMonth();
@@ -2301,7 +2145,7 @@ function buildCsv(data, range) {
 
 async function shareCsv(csv, label) {
   try {
-    const f = new FS.File(FS.Paths.cache, `panda-${label}.csv`);
+    const f = new FS.File(FS.Paths.cache, `builds-${label}.csv`);
     if (f.exists) f.delete();
     f.create();
     f.write(csv);
